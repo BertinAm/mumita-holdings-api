@@ -30,28 +30,64 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY') or (
 if not SECRET_KEY:
     raise RuntimeError('DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is off')
 
-ALLOWED_HOSTS = []
+
+def env_list(name, default=''):
+    return [item.strip() for item in os.environ.get(name, default).split(',') if item.strip()]
+
+
+def env_bool(name, default):
+    value = os.environ.get(name)
+    return default if value is None else value.lower() in ('1', 'true', 'yes', 'on')
+
+
+def env_int(name, default):
+    value = os.environ.get(name)
+    return default if value in (None, '') else int(value)
+
+
+ALLOWED_HOSTS = env_list('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,[::1]' if DEBUG else '')
+CSRF_TRUSTED_ORIGINS = env_list('DJANGO_CSRF_TRUSTED_ORIGINS')
+
+# The admin is the CMS. It never sits at the default /admin/ path.
+ADMIN_URL = os.environ.get('DJANGO_ADMIN_URL', 'cms-admin/').strip('/') + '/'
+if ADMIN_URL == 'admin/':
+    raise RuntimeError('DJANGO_ADMIN_URL must not be the default admin/ path')
 
 
 # Application definition
 
 INSTALLED_APPS = [
+    # modeltranslation must precede django.contrib.admin.
+    'modeltranslation',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'corsheaders',
+    'axes',
+    'brands',
+    'catalog',
+    'content',
+    'people',
+    'engagement',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'django.middleware.csp.ContentSecurityPolicyMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'common.i18n.ApiLocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Axes last, per its docs.
+    'axes.middleware.AxesMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -75,58 +111,207 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 
 # Database
-# https://docs.djangoproject.com/en/6.1/ref/settings/#databases
+# SQLite locally; PostgreSQL (PLAN §0.1) when DJANGO_DB_NAME is set.
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+if os.environ.get('DJANGO_DB_NAME'):
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ['DJANGO_DB_NAME'],
+            'USER': os.environ.get('DJANGO_DB_USER', ''),
+            'PASSWORD': os.environ.get('DJANGO_DB_PASSWORD', ''),
+            'HOST': os.environ.get('DJANGO_DB_HOST', 'localhost'),
+            'PORT': os.environ.get('DJANGO_DB_PORT', '5432'),
+            'CONN_MAX_AGE': 60,
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
-# Password validation
-# https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
+# Authentication
+# Review §11: strong passwords on every admin account; login throttling via
+# django-axes (5 failures per username+IP, 1 hour lock-out).
 
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', 'OPTIONS': {'min_length': 12}},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
+AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+AXES_FAILURE_LIMIT = env_int('AXES_FAILURE_LIMIT', 5)
+AXES_COOLOFF_TIME = 1  # hours
+AXES_LOCKOUT_PARAMETERS = [['username', 'ip_address']]
+AXES_RESET_ON_SUCCESS = True
+# Number of reverse proxies in front of Django (Cloudflare + nginx = 2).
+# Used by DRF throttling and axes to find the client IP in X-Forwarded-For.
+NUM_PROXIES = env_int('DJANGO_NUM_PROXIES', 0)
+if NUM_PROXIES:
+    AXES_IPWARE_PROXY_COUNT = NUM_PROXIES
+    AXES_IPWARE_META_PRECEDENCE_ORDER = ['HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR']
 
-# Internationalization
-# https://docs.djangoproject.com/en/6.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+# Internationalisation
+# Six site locales, using the frontend's codes (src/i18n/locales.ts).
+# Translatable model fields use django-modeltranslation: one column per
+# locale (title_en, title_fr, ...), English as the fallback.
+
+LANGUAGE_CODE = 'en'
+LANGUAGES = [
+    ('en', 'English'),
+    ('fr', 'Français'),
+    ('sw', 'Kiswahili'),
+    ('es', 'Español'),
+    ('zh', '中文'),
+    ('pt', 'Português'),
+]
+MODELTRANSLATION_DEFAULT_LANGUAGE = 'en'
+MODELTRANSLATION_FALLBACK_LANGUAGES = ('en',)
 
 TIME_ZONE = 'UTC'
-
 USE_I18N = True
-
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/6.1/howto/static-files/
+# Static and uploaded files
+# MEDIA_ROOT sits outside any web root the frontend serves (Review §11).
 
 STATIC_URL = 'static/'
+STATIC_ROOT = Path(os.environ.get('DJANGO_STATIC_ROOT', BASE_DIR / 'staticfiles'))
+MEDIA_URL = os.environ.get('DJANGO_MEDIA_URL', '/media/')
+MEDIA_ROOT = Path(os.environ.get('DJANGO_MEDIA_ROOT', BASE_DIR / 'media'))
+FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
+
+
+# REST framework
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [],
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
+    'UNAUTHENTICATED_USER': None,
+    'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer']
+    + (['rest_framework.renderers.BrowsableAPIRenderer'] if DEBUG else []),
+    'DEFAULT_PARSER_CLASSES': ['rest_framework.parsers.JSONParser'],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
+    'DEFAULT_THROTTLE_RATES': {
+        'enquiries': os.environ.get('ENQUIRY_THROTTLE_RATE', '5/hour'),
+    },
+    'NUM_PROXIES': NUM_PROXIES or None,
+}
+
+# Cache backs the throttle counters. Use a shared cache (Redis/Memcached)
+# when running more than one process in production.
+CACHES = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}}
+
+
+# CORS: only the frontend origin(s) may call the API from a browser.
+
+CORS_ALLOWED_ORIGINS = env_list(
+    'DJANGO_CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:3111' if DEBUG else ''
+)
+CORS_URLS_REGEX = r'^/api/.*$'
+CORS_ALLOW_METHODS = ['GET', 'OPTIONS', 'POST']
+CORS_ALLOW_CREDENTIALS = False
+
+
+# Enquiries
+
+ENQUIRY_NOTIFY_EMAILS = env_list('ENQUIRY_NOTIFY_EMAILS', 'info@localhost' if DEBUG else '')
+ENQUIRY_RETENTION_DAYS = env_int('ENQUIRY_RETENTION_DAYS', 365)
 
 
 # Email
-# https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
+# Console backend unless DJANGO_EMAIL_HOST is set, then SMTP.
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
+DEFAULT_FROM_EMAIL = os.environ.get('DJANGO_DEFAULT_FROM_EMAIL', 'website@localhost')
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
+if os.environ.get('DJANGO_EMAIL_HOST'):
+    MAILERS = {
+        'default': {
+            'BACKEND': 'django.core.mail.backends.smtp.EmailBackend',
+            'OPTIONS': {
+                'host': os.environ['DJANGO_EMAIL_HOST'],
+                'port': env_int('DJANGO_EMAIL_PORT', 587),
+                'username': os.environ.get('DJANGO_EMAIL_USER', ''),
+                'password': os.environ.get('DJANGO_EMAIL_PASSWORD', ''),
+                'use_tls': env_bool('DJANGO_EMAIL_USE_TLS', True),
+                'timeout': 10,
+            },
+        },
+    }
+else:
+    MAILERS = {'default': {'BACKEND': 'django.core.mail.backends.console.EmailBackend'}}
+
+
+# Security
+# Review §11 / PLAN §0.2. Always-on headers first, then HTTPS-only settings
+# that apply whenever DEBUG is off.
+
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
+X_FRAME_OPTIONS = 'DENY'
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_AGE = 60 * 60 * 8
+CSRF_COOKIE_SAMESITE = 'Lax'
+
+# CSP for everything Django itself serves (admin and JSON). The public site's
+# CSP is set by the Next.js frontend.
+from django.utils.csp import CSP  # noqa: E402
+
+SECURE_CSP = {
+    'default-src': [CSP.SELF],
+    'script-src': [CSP.SELF],
+    'style-src': [CSP.SELF],
+    'img-src': [CSP.SELF, 'data:'],
+    'font-src': [CSP.SELF],
+    'connect-src': [CSP.SELF],
+    'object-src': [CSP.NONE],
+    'base-uri': [CSP.SELF],
+    'form-action': [CSP.SELF],
+    'frame-ancestors': [CSP.NONE],
+}
+
+if not DEBUG:
+    SECURE_SSL_REDIRECT = env_bool('DJANGO_SECURE_SSL_REDIRECT', True)
+    SECURE_HSTS_SECONDS = env_int('DJANGO_HSTS_SECONDS', 60 * 60 * 24 * 365)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool('DJANGO_HSTS_INCLUDE_SUBDOMAINS', True)
+    SECURE_HSTS_PRELOAD = env_bool('DJANGO_HSTS_PRELOAD', False)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    # Behind Cloudflare / a TLS-terminating proxy, trust its scheme header.
+    if env_bool('DJANGO_BEHIND_PROXY', False):
+        SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    if not ALLOWED_HOSTS:
+        raise RuntimeError('DJANGO_ALLOWED_HOSTS must be set when DJANGO_DEBUG is off')
+
+
+# Logging
+# Never log enquiry bodies or contact details: application loggers record
+# ids and types only. Mail and request errors go to stderr.
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {'plain': {'format': '%(asctime)s %(levelname)s %(name)s %(message)s'}},
+    'handlers': {'console': {'class': 'logging.StreamHandler', 'formatter': 'plain'}},
+    'root': {'handlers': ['console'], 'level': 'WARNING'},
+    'loggers': {
+        'engagement': {'handlers': ['console'], 'level': os.environ.get('ENQUIRY_LOG_LEVEL', 'INFO'), 'propagate': False},
     },
 }
