@@ -1,0 +1,6 @@
+# Reviewed gitleaks false positives (fingerprint = commit:file:rule:line).
+# Both are made-up passphrases in unit tests that exercise the password rules;
+# they are not credentials for anything. Add a line here only after reviewing
+# the finding; never to silence a real secret.
+7e4d4a7b69a38572fb5673ab2ef720aba8207220:tests/test_users.py:generic-api-key:73
+7e4d4a7b69a38572fb5673ab2ef720aba8207220:tests/test_auth.py:generic-api-key:162
