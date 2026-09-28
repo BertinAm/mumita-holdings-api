@@ -70,7 +70,7 @@ class PostViewSet(PublicReadOnlyViewSet):
         return s.PostDetailSerializer if self.action == 'retrieve' else s.PostListSerializer
 
     def base_queryset(self):
-        return Post.objects.published().select_related('author')
+        return Post.objects.published().select_related('author', 'cover', 'created_by__profile')
 
 
 class TeamMemberViewSet(PublicReadOnlyViewSet):
@@ -102,3 +102,7 @@ class GalleryItemViewSet(PublicReadOnlyViewSet):
     serializer_class = s.GalleryItemSerializer
     lookup_field = 'pk'
     filters = {'category': 'category'}
+
+    def base_queryset(self):
+        # Dashboard uploads only; the frontend's bundled gallery is its fallback.
+        return GalleryItem.objects.published().filter(image__isnull=False).select_related('image')

@@ -47,7 +47,7 @@ class ApiTests(TestCase):
         Post.objects.create(slug='draft', title_en='Draft', body_en='x', status=Status.REVIEW, published_at=now)
         Post.objects.create(slug='soon', title_en='Soon', body_en='x', status=P, published_at=now + timedelta(days=2))
         self.assertEqual(self.slugs('/api/v1/posts/'), ['live'])
-        self.assertIn('body', self.client.get('/api/v1/posts/live/').json())
+        self.assertIn('body_html', self.client.get('/api/v1/posts/live/').json())
 
     def test_team_requires_consent(self):
         TeamMember.objects.create(name='A', slug='a', department='it', status=P, consent_to_publish=True)
@@ -57,7 +57,8 @@ class ApiTests(TestCase):
     def test_author_without_consent_is_not_named(self):
         b = TeamMember.objects.create(name='B', slug='b', department='hr', status=P, consent_to_publish=False)
         Post.objects.create(slug='p', title_en='P', body_en='x', status=P, published_at=timezone.now(), author=b)
-        self.assertIsNone(self.client.get('/api/v1/posts/p/').json()['author'])
+        # The byline falls back to the organisation, never the unconsented name.
+        self.assertEqual(self.client.get('/api/v1/posts/p/').json()['author'], 'Mumita Holdings')
 
     def test_partners_require_permission_and_filter_by_tier(self):
         Partner.objects.create(name='C', slug='c', tier='buyer', status=P, permission_to_display=True)

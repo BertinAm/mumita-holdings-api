@@ -6,7 +6,8 @@ from rest_framework import serializers
 
 from brands.models import Brand
 from catalog.models import Product, Service
-from content.models import GalleryItem, Post
+from content.images import image_payload
+from content.models import GalleryItem, Post, auto_excerpt, reading_minutes
 from people.models import Partner, Region, TeamMember
 
 
@@ -59,32 +60,37 @@ class TeamMemberSerializer(serializers.ModelSerializer):
         fields = ['slug', 'name', 'qualification', 'years_experience', 'department', 'tier', 'value_statement']
 
 
-class AuthorSerializer(serializers.ModelSerializer):
-    """Byline, built the no-faces way (Review §8): name, department, qualification."""
-
-    class Meta:
-        model = TeamMember
-        fields = ['slug', 'name', 'department', 'qualification']
-
-
 class PostListSerializer(serializers.ModelSerializer):
-    author = serializers.SerializerMethodField()
+    """PLATFORM-CONTRACT "Public": author is a display name; cover is an
+    image object (null for migrated posts, which carry `media_key`)."""
+
+    author = serializers.CharField(source='author_name', read_only=True)
+    excerpt = serializers.SerializerMethodField()
+    reading_minutes = serializers.SerializerMethodField()
+    cover = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
-        fields = ['slug', 'title', 'dek', 'lens', 'author', 'published_at', 'media_key']
+        fields = [
+            'slug', 'title', 'dek', 'excerpt', 'lens', 'author', 'published_at', 'reading_minutes',
+            'cover', 'media_key',
+        ]
 
-    def get_author(self, obj):
-        a = obj.author
-        # Only a published, consenting profile may be named.
-        if a and a.status == 'published' and a.consent_to_publish:
-            return AuthorSerializer(a).data
-        return None
+    def get_excerpt(self, obj):
+        return obj.excerpt or auto_excerpt(obj.body)
+
+    def get_reading_minutes(self, obj):
+        return reading_minutes(obj.body)
+
+    def get_cover(self, obj):
+        return image_payload(obj.cover, self.context.get('request'))
 
 
 class PostDetailSerializer(PostListSerializer):
+    body_html = serializers.CharField(source='body', read_only=True)
+
     class Meta(PostListSerializer.Meta):
-        fields = PostListSerializer.Meta.fields + ['body', 'seo_title', 'meta_description']
+        fields = PostListSerializer.Meta.fields + ['body_html', 'seo_title', 'seo_description']
 
 
 class PartnerSerializer(serializers.ModelSerializer):
@@ -100,6 +106,11 @@ class RegionSerializer(serializers.ModelSerializer):
 
 
 class GalleryItemSerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField()
+
     class Meta:
         model = GalleryItem
-        fields = ['id', 'media_key', 'alt', 'caption', 'category', 'place', 'date', 'has_identifiable_faces']
+        fields = ['id', 'category', 'alt', 'caption', 'image']
+
+    def get_image(self, obj):
+        return image_payload(obj.image, self.context.get('request'))

@@ -5,7 +5,7 @@ from .models import GalleryItem, Post
 
 @register(Post)
 class PostTR(TranslationOptions):
-    fields = ('title', 'dek', 'body', 'seo_title', 'meta_description')
+    fields = ('title', 'dek', 'excerpt', 'body', 'seo_title', 'seo_description')
     required_languages = ('en',)
 
 
