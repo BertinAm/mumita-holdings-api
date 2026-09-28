@@ -82,7 +82,10 @@ python3 -m venv .venv
   SQLite and PostgreSQL. Set `DJANGO_DB_ENGINE` to run it on another
   engine.
 - Emails go to the console until `DJANGO_EMAIL_HOST` is set.
-- Before committing: `python scripts/check_public.py`.
+- Before committing: `python scripts/check_public.py`. In the standalone
+  repo it can run as a hook:
+  `printf '#!/bin/sh\nexec python3 scripts/check_public.py\n' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit`.
+  Mark a deliberate test string with the comment `check_public: ignore`.
 
 (In the monorepo the virtualenv is `../backend-venv`, and the commands are
 the same.)
