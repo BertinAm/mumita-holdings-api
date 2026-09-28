@@ -39,17 +39,23 @@ class CommandTests(TestCase):
     def test_seed_posts_keeps_original_dates(self):
         call_command('seed_posts', stdout=StringIO())
         call_command('seed_posts', stdout=StringIO())  # idempotent
-        self.assertEqual(Post.objects.count(), 6)
+        self.assertEqual(Post.objects.count(), 7)
         dates = [p.published_at.date().isoformat() for p in Post.objects.order_by('-published_at')]
-        self.assertEqual(dates, ['2020-01-09', '2019-09-08', '2019-05-24', '2019-03-08', '2018-11-28', '2018-11-02'])
+        self.assertEqual(dates, ['2026-05-05', '2020-01-09', '2019-09-08', '2019-05-24', '2019-03-08', '2018-11-28', '2018-11-02'])
         post = Post.objects.get(slug='why-food-quality-matters-a-guide-for-farmers-and-consumers')
         self.assertEqual(post.author_name, 'Mumita Holdings')
         self.assertTrue(post.body.startswith('<p>'))
         self.assertIn('<strong>', post.body)
         self.assertNotIn('<b>', post.body)
         res = self.client.get('/api/v1/posts/').json()
-        self.assertEqual(res['count'], 6)
-        self.assertEqual(res['results'][0]['media_key'], '2025-06-img-8009')
+        self.assertEqual(res['count'], 7)
+        # newest first: the Silicon Mountain record (2026), then the 2020 post
+        self.assertEqual(res['results'][0]['slug'], 'silicon-mountain-the-complete-record')
+        self.assertEqual(res['results'][1]['media_key'], '2025-06-img-8009')
+        sm = Post.objects.get(slug='silicon-mountain-the-complete-record')
+        self.assertIn('<h3>', sm.body)
+        self.assertIn('<blockquote>', sm.body)
+        self.assertNotIn('mailto:', sm.body)
 
     def test_env_example_documents_every_setting(self):
         source = (Path(settings.BASE_DIR) / 'config' / 'settings.py').read_text()

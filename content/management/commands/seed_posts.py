@@ -1,4 +1,4 @@
-"""Seed the six genuine journal posts from the live site.
+"""Seed the genuine journal posts from the live site (seven, as of 2026-09-28).
 
     python manage.py seed_posts                      # from seed_assets/posts.json
     python manage.py seed_posts --export-from ../frontend   # rebuild that file first
@@ -32,13 +32,22 @@ BYLINE = 'Mumita Holdings'
 POST_RE = re.compile(r'slug:\s*"([^"]+)",\s*date:\s*"(\d{4}-\d{2}-\d{2})",\s*category:\s*"([^"]+)",\s*hero:\s*"([^"]+)"')
 
 
+INLINE_MARK = re.compile(r'(<b>.*?</b>|<i>.*?</i>|<a href="https?://[^"]+">.*?</a>)')
+LINK = re.compile(r'^<a href="(https?://[^"]+)">(.*)</a>$')
+
+
 def inline(text):
-    """Escape, then turn the blog.json <b>…</b> lead-ins into <strong>."""
-    parts = re.split(r'(<b>.*?</b>)', text)
+    """Escape, then turn the blog.json inline marks into HTML: <b>…</b> lead-ins
+    into <strong>, <i>…</i> into <em>, and <a href="https://…">…</a> links
+    (http(s) only, as in the frontend's PostBody)."""
     out = []
-    for part in parts:
+    for part in INLINE_MARK.split(text):
         if part.startswith('<b>') and part.endswith('</b>'):
             out.append(f'<strong>{html.escape(part[3:-4], quote=False)}</strong>')
+        elif part.startswith('<i>') and part.endswith('</i>'):
+            out.append(f'<em>{html.escape(part[3:-4], quote=False)}</em>')
+        elif m := LINK.match(part):
+            out.append(f'<a href="{html.escape(m[1])}">{html.escape(m[2], quote=False)}</a>')
         else:
             out.append(html.escape(part, quote=False))
     return ''.join(out)
@@ -46,11 +55,15 @@ def inline(text):
 
 def blocks_to_html(blocks):
     """Same rules as the frontend's PostBody: p paragraph, h heading (h2),
-    l list with one item per line."""
+    s sub-heading (h3), q pull-quote, l list with one item per line."""
     out = []
     for key, text in blocks.items():
         if key.startswith('h'):
             out.append(f'<h2>{inline(text)}</h2>')
+        elif key.startswith('s'):
+            out.append(f'<h3>{inline(text)}</h3>')
+        elif key.startswith('q'):
+            out.append(f'<blockquote><p>{inline(text)}</p></blockquote>')
         elif key.startswith('l'):
             items = ''.join(f'<li>{inline(line)}</li>' for line in text.split('\n') if line.strip())
             out.append(f'<ul>{items}</ul>')
@@ -79,7 +92,7 @@ def export(frontend):
 
 
 class Command(BaseCommand):
-    help = 'Seed the six original journal posts (true original dates).'
+    help = 'Seed the original journal posts from the live site (true original dates).'
 
     def add_arguments(self, parser):
         parser.add_argument('--export-from', metavar='FRONTEND_DIR',
