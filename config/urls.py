@@ -9,11 +9,14 @@ from django.contrib import admin
 from django.urls import include, path, re_path
 from django.views.static import serve
 
+from common.robots import robots_txt
+
 admin.site.site_header = 'Mumita Holdings CMS'
 admin.site.site_title = 'Mumita CMS'
 admin.site.index_title = 'Content'
 
 urlpatterns = [
+    path('robots.txt', robots_txt),
     path(settings.ADMIN_URL, admin.site.urls),
     path('api/v1/', include('api.urls')),
 ]

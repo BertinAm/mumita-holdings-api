@@ -363,6 +363,10 @@ subdomain's `.htaccess` (for example `LimitRequestBody 16777216`).
   - CSP for everything Django serves;
   - `X-Frame-Options: DENY`, nosniff, a strict referrer policy and COOP.
 - The Django admin sits at `DJANGO_ADMIN_URL`, never `/admin/`.
+- Not indexable: every response except `/media/` carries
+  `X-Robots-Tag: noindex, nofollow, noarchive`, and `/robots.txt` disallows
+  everything but `/media/` (`common/robots.py`). The frontend's `/dashboard`
+  and `/write` apps have their own noindex header, meta tag and robots rule.
 - Passwords need 12+ characters and Django's validators. Generated
   passwords have 24 characters.
 - **django-axes** locks an email+IP pair for 1 hour after 5 failures. The

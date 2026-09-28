@@ -75,6 +75,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # X-Robots-Tag: noindex on everything but /media/ (common/robots.py).
+    'common.robots.NoIndexMiddleware',
     # Static files (admin and DRF assets) straight from the app on Passenger.
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.middleware.csp.ContentSecurityPolicyMiddleware',
