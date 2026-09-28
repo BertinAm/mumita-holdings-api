@@ -38,14 +38,14 @@ LINK = re.compile(r'^<a href="(https?://[^"]+)">(.*)</a>$')
 
 def inline(text):
     """Escape, then turn the blog.json inline marks into HTML: <b>…</b> lead-ins
-    into <strong>, <i>…</i> into <em>, and <a href="https://…">…</a> links
+    into <strong>, <i>…</i> into <em> (its contents marked up the same way), and <a href="https://…">…</a> links
     (http(s) only, as in the frontend's PostBody)."""
     out = []
     for part in INLINE_MARK.split(text):
         if part.startswith('<b>') and part.endswith('</b>'):
             out.append(f'<strong>{html.escape(part[3:-4], quote=False)}</strong>')
         elif part.startswith('<i>') and part.endswith('</i>'):
-            out.append(f'<em>{html.escape(part[3:-4], quote=False)}</em>')
+            out.append(f'<em>{inline(part[3:-4])}</em>')
         elif m := LINK.match(part):
             out.append(f'<a href="{html.escape(m[1])}">{html.escape(m[2], quote=False)}</a>')
         else:
