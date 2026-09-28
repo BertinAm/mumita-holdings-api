@@ -344,8 +344,12 @@ The full go-live runbook, with DNS and the Worker, is `06-plan/DEPLOY.md`
      `https://mumitaholdings.com/dashboard/login`, where you must change
      it.
    - `send_test_email you@example.com` checks SMTP.
-7. **Cron**: cPanel → Cron Jobs, daily:
-   `15 3 * * * cd ~/mumita-api && ~/virtualenv/mumita-api/3.12/bin/python manage.py purge_enquiries`
+7. **Cron**: cPanel → Cron Jobs:
+   - daily: `15 3 * * * cd ~/mumita-api && ~/virtualenv/mumita-api/3.12/bin/python manage.py purge_enquiries`
+   - every 5 minutes (publishes content changes to the static frontend by
+     calling the Workers Builds deploy hook in `FRONTEND_DEPLOY_HOOK_URL`, once
+     per burst of edits):
+     `*/5 * * * * cd ~/mumita-api && ~/virtualenv/mumita-api/3.12/bin/python manage.py rebuild_frontend`
 8. **Restart**: after changing environment variables, press Restart in
    Setup Python App (or `touch ~/mumita-api/tmp/restart.txt`).
 

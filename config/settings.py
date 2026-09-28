@@ -308,6 +308,9 @@ CSRF_COOKIE_HTTPONLY = False
 REVALIDATE_KEY = env_str('REVALIDATE_KEY')
 REVALIDATE_TIMEOUT = float(env_str('REVALIDATE_TIMEOUT', '3'))
 ANALYTICS_INGEST_KEY = env_str('ANALYTICS_INGEST_KEY')
+# Workers Builds deploy hook (a secret URL): `manage.py rebuild_frontend`
+# POSTs to it when content has changed (DEPLOY.md 2.8).
+FRONTEND_DEPLOY_HOOK_URL = env_str('FRONTEND_DEPLOY_HOOK_URL')
 
 # Hosts treated as "ours" when deciding whether a link in an article is
 # external (external links get rel="noopener noreferrer").

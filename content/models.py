@@ -257,3 +257,27 @@ class GalleryItem(Publishable):
 
     def __str__(self):
         return self.media_key or f'Gallery photo #{self.pk}'
+
+
+class FrontendRebuild(models.Model):
+    """One row: when public content last changed and when the frontend was
+    last asked to rebuild (Free plan without R2: pages are static per build,
+    DEPLOY.md 2.8). `manage.py rebuild_frontend`, run by cron, calls the
+    Workers Builds deploy hook when `requested_at` is newer than
+    `triggered_at`, so a burst of edits costs one build."""
+
+    requested_at = models.DateTimeField(null=True, blank=True)
+    triggered_at = models.DateTimeField(null=True, blank=True)
+    last_status = models.CharField(max_length=40, blank=True)
+
+    class Meta:
+        verbose_name = 'frontend rebuild'
+
+    @classmethod
+    def request(cls):
+        from django.utils import timezone
+
+        cls.objects.update_or_create(pk=1, defaults={'requested_at': timezone.now()})
+
+    def __str__(self):
+        return f'requested {self.requested_at}, triggered {self.triggered_at}'
