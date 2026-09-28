@@ -15,7 +15,7 @@ from .helpers import REVALIDATE_SETTINGS, DashboardTestCase, jpeg
 M = '/api/v1/manage/gallery/'
 
 
-@override_settings(**REVALIDATE_SETTINGS)
+@override_settings(**REVALIDATE_SETTINGS, MEDIA_BASE_URL="")
 @mock.patch('common.revalidate._post', return_value=200)
 class GalleryTests(DashboardTestCase):
     def setUp(self):
