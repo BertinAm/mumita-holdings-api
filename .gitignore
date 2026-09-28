@@ -1,4 +1,18 @@
-# Uploaded files and collected static: never committed.
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local data and secrets
+db.sqlite3
+db.sqlite3-journal
+.env
+.env.*
+!.env.example
+
+# Uploaded and collected files
 media/
 staticfiles/
-db.sqlite3
+
+.DS_Store

@@ -1,24 +1,56 @@
-# Mumita backend
+# Mumita Holdings — website API and CMS
 
-Django 6.1 + Django REST Framework 3.18. The Django admin is the CMS. The
-public API is read-only apart from the enquiry endpoint.
+The backend for the **Mumita Holdings SARL** website: a Django 6.1 + Django
+REST Framework 3.18 service. The Django admin is the CMS for the brands,
+products, services, blog posts, team, partners, regions and gallery. The
+public API is read-only, apart from one write endpoint: the website's
+four-field enquiry form. The frontend is the Next.js site
+(`mumita-holdings-web`).
+
+## Stack
+
+| | |
+|---|---|
+| Framework | Django 6.1, Django REST Framework 3.18 |
+| Translations | django-modeltranslation: a column per locale (en, fr, sw, es, zh, pt), English fallback |
+| Security | django-axes (admin login lock-out), django-cors-headers, CSP and hardened settings when DEBUG is off |
+| Database | SQLite in development; PostgreSQL when `DJANGO_DB_NAME` is set (psycopg2) |
+
+Python 3.12 or later (developed on 3.14).
+
+## Project layout
+
+```
+config/        settings (all environment-driven), urls, wsgi/asgi
+api/           DRF viewsets, serializers and the /api/v1/ routes
+brands/        Brand: the four companies and the Foods lines (colours live in the frontend)
+catalog/       Product and Service
+content/       Post (true original publish dates), GalleryItem
+people/        TeamMember (no photo field, by design), Partner, Region
+engagement/    Enquiry: the form endpoint, notification email, retention purge
+common/        abstract base models (status, ordering, timestamps), publish/draft admin
+               actions, and locale negotiation (?lang= → Accept-Language → English)
+tests/         the test suite (models, API filters, enquiry validation, locale fallback)
+```
 
 ## Run it
 
 ```bash
-cd app/backend
-../backend-venv/bin/pip install -r requirements.txt   # first time only
-../backend-venv/bin/python manage.py migrate
-../backend-venv/bin/python manage.py seed_site         # brands, products, regions, partners
-../backend-venv/bin/python manage.py createsuperuser
-../backend-venv/bin/python manage.py runserver         # http://127.0.0.1:8000
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python manage.py migrate
+.venv/bin/python manage.py seed_site          # brands, products, regions, partners
+.venv/bin/python manage.py createsuperuser
+.venv/bin/python manage.py runserver          # http://127.0.0.1:8000
 ```
 
 - Admin (CMS): `http://127.0.0.1:8000/cms-admin/` in development (`DJANGO_ADMIN_URL`).
 - API root: `http://127.0.0.1:8000/api/v1/`
-- Tests: `../backend-venv/bin/python manage.py test tests`
-- Deploy check: `DJANGO_DEBUG=0 DJANGO_SECRET_KEY=... DJANGO_ALLOWED_HOSTS=... DJANGO_EMAIL_HOST=... ../backend-venv/bin/python manage.py check --deploy`
+- Tests: `.venv/bin/python manage.py test tests`
+- Deploy check: `DJANGO_DEBUG=0 DJANGO_SECRET_KEY=... DJANGO_ALLOWED_HOSTS=... DJANGO_EMAIL_HOST=... .venv/bin/python manage.py check --deploy`
 - Daily cron in production: `manage.py purge_enquiries` (deletes enquiries past their retention date).
+
+(In the original monorepo the virtualenv sits at `../backend-venv`; the commands are the same.)
 
 `seed_site` loads only documented data: the four companies and the two
 Foods lines, the six products from `frontend/src/lib/data/products.ts` with
