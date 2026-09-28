@@ -89,3 +89,22 @@ class EnquiryTests(TestCase):
 
     def test_get_not_allowed(self):
         self.assertEqual(self.client.get(URL).status_code, 405)
+
+    def test_source_and_topic_are_optional_page_fields(self):
+        res = self.post({**VALID, 'source': 'product-quote', 'topic': 'Plantain Flour'})
+        self.assertEqual(res.status_code, 201, res.content)
+        e = Enquiry.objects.get()
+        self.assertEqual((e.source, e.topic), ('product-quote', 'Plantain Flour'))
+        self.assertEqual(e.status, 'unread')
+
+    def test_unknown_source_refused(self):
+        res = self.post({**VALID, 'source': 'newsletter'})
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('source', res.json())
+        self.assertEqual(self.post({**VALID, 'topic': 'x' * 121}).status_code, 400)
+        self.assertFalse(Enquiry.objects.exists())
+
+    def test_every_contract_source_accepted(self):
+        sources = ['contact', 'partners', 'join-distributor', 'join-strategic', 'join-investor', 'join-volunteer',
+                   'join-grant', 'marketplace-register', 'feasibility', 'product-quote', 'service-quote']
+        self.assertEqual(sorted(Enquiry.Source.values), sorted(sources))
