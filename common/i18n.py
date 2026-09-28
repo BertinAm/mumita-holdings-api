@@ -14,6 +14,7 @@ from django.utils.translation.trans_real import parse_accept_lang_header
 
 SITE_LOCALES = tuple(code for code, _ in settings.LANGUAGES)
 DEFAULT_LOCALE = settings.MODELTRANSLATION_DEFAULT_LANGUAGE
+ENGLISH_ONLY_PREFIXES = ('/api/v1/auth/', '/api/v1/manage/', '/api/v1/write/')
 
 
 def normalise(code):
@@ -49,7 +50,12 @@ class ApiLocaleMiddleware:
     def __call__(self, request):
         if not request.path.startswith('/api/'):
             return self.get_response(request)
-        lang = locale_from_request(request)
+        # The dashboards are English-only and write the English columns:
+        # never let a browser's Accept-Language redirect their writes.
+        if request.path.startswith(ENGLISH_ONLY_PREFIXES):
+            lang = DEFAULT_LOCALE
+        else:
+            lang = locale_from_request(request)
         request.LANGUAGE_CODE = lang
         with translation.override(lang):
             response = self.get_response(request)

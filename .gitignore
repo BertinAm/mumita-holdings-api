@@ -4,15 +4,26 @@ __pycache__/
 .venv/
 venv/
 
-# Local data and secrets
+# Local data and secrets (this repository is PUBLIC)
 db.sqlite3
 db.sqlite3-journal
+*.sqlite3
+*.db
+*.sql
+*.dump
 .env
 .env.*
 !.env.example
+*.pem
+*.key
 
 # Uploaded and collected files
 media/
 staticfiles/
+
+# Passenger restart marker and logs
+tmp/
+*.log
+stderr.log
 
 .DS_Store

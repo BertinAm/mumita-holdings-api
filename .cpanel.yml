@@ -1,0 +1,20 @@
+# cPanel Git Version Control deployment task ("Deploy HEAD Commit"),
+# matching 06-plan/DEPLOY.md §5.3-5.4:
+#   repository  /home/<cpuser>/repositories/mumita-holdings-api  (cPanel's clone)
+#   app root    /home/<cpuser>/mumita-api                        (Setup Python App)
+#   virtualenv  /home/<cpuser>/virtualenv/mumita-api/3.12        (created by Setup Python App)
+# Change APPROOT / VENV below if the app root or Python version differ.
+# The app root's .env, media/, staticfiles/ and tmp/ are never overwritten.
+# migrate/collectstatic read the environment from APPROOT/.env (cPanel's
+# per-app environment variables are only given to Passenger).
+---
+deployment:
+  tasks:
+    - export APPROOT=$HOME/mumita-api
+    - export VENV=$HOME/virtualenv/mumita-api/3.12
+    - mkdir -p $APPROOT/tmp
+    - /usr/bin/rsync -a --delete --exclude=.git --exclude=.env --exclude=media/ --exclude=staticfiles/ --exclude=tmp/ ./ $APPROOT/
+    - cd $APPROOT && $VENV/bin/pip install --quiet -r requirements.txt
+    - cd $APPROOT && $VENV/bin/python manage.py migrate --noinput
+    - cd $APPROOT && $VENV/bin/python manage.py collectstatic --noinput
+    - touch $APPROOT/tmp/restart.txt

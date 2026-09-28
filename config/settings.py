@@ -11,10 +11,17 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
+from urllib.parse import urlsplit
+
+from .env import env_bool, env_int, env_list, env_str, load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Optional .env next to manage.py (git-ignored). Real environment wins.
+load_dotenv(BASE_DIR / '.env')
 
 
 # Quick-start development settings - unsuitable for production
@@ -31,22 +38,11 @@ if not SECRET_KEY:
     raise RuntimeError('DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is off')
 
 
-def env_list(name, default=''):
-    return [item.strip() for item in os.environ.get(name, default).split(',') if item.strip()]
-
-
-def env_bool(name, default):
-    value = os.environ.get(name)
-    return default if value is None else value.lower() in ('1', 'true', 'yes', 'on')
-
-
-def env_int(name, default):
-    value = os.environ.get(name)
-    return default if value in (None, '') else int(value)
-
-
 ALLOWED_HOSTS = env_list('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,[::1]' if DEBUG else '')
-CSRF_TRUSTED_ORIGINS = env_list('DJANGO_CSRF_TRUSTED_ORIGINS')
+
+# The public website (Next.js). Used for the revalidation webhook, links in
+# emails and the list of "our" hosts when marking external links.
+FRONTEND_URL = env_str('DJANGO_FRONTEND_URL', 'http://localhost:3111' if DEBUG else '').rstrip('/')
 
 # The admin is the CMS. It never sits at the default /admin/ path.
 ADMIN_URL = os.environ.get('DJANGO_ADMIN_URL', 'cms-admin/').strip('/') + '/'
@@ -68,15 +64,19 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'axes',
+    'accounts',
     'brands',
     'catalog',
     'content',
     'people',
     'engagement',
+    'analytics',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # Static files (admin and DRF assets) straight from the app on Passenger.
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.middleware.csp.ContentSecurityPolicyMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -111,27 +111,61 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 
 # Database
-# SQLite locally; PostgreSQL (PLAN §0.1) when DJANGO_DB_NAME is set.
+# DJANGO_DB_ENGINE picks the backend: sqlite (development default), mysql
+# (Namecheap: MySQL/MariaDB through PyMySQL, pure Python, no compiler) or
+# postgresql. For backward compatibility, DJANGO_DB_NAME alone selects
+# PostgreSQL.
 
-if os.environ.get('DJANGO_DB_NAME'):
+DB_ENGINE = env_str('DJANGO_DB_ENGINE', 'postgresql' if os.environ.get('DJANGO_DB_NAME') else 'sqlite').lower()
+
+if DB_ENGINE == 'mysql':
+    try:
+        import pymysql
+    except ImportError:  # pragma: no cover - only without the dependency
+        pass
+    else:
+        # Django checks the mysqlclient version; PyMySQL implements the same
+        # DB-API, so report a compatible version before installing the shim.
+        pymysql.version_info = (2, 2, 1, 'final', 0)
+        pymysql.install_as_MySQLdb()
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': env_str('DJANGO_DB_NAME'),
+            'USER': env_str('DJANGO_DB_USER'),
+            'PASSWORD': env_str('DJANGO_DB_PASSWORD'),
+            'HOST': env_str('DJANGO_DB_HOST', 'localhost'),
+            'PORT': env_str('DJANGO_DB_PORT', '3306'),
+            'CONN_MAX_AGE': env_int('DJANGO_DB_CONN_MAX_AGE', 0),
+            'OPTIONS': {
+                'charset': 'utf8mb4',
+                'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+                'isolation_level': 'read committed',
+            },
+            'TEST': {'CHARSET': 'utf8mb4', 'COLLATION': 'utf8mb4_unicode_ci'},
+        }
+    }
+elif DB_ENGINE in ('postgresql', 'postgres'):
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.environ['DJANGO_DB_NAME'],
-            'USER': os.environ.get('DJANGO_DB_USER', ''),
-            'PASSWORD': os.environ.get('DJANGO_DB_PASSWORD', ''),
-            'HOST': os.environ.get('DJANGO_DB_HOST', 'localhost'),
-            'PORT': os.environ.get('DJANGO_DB_PORT', '5432'),
-            'CONN_MAX_AGE': 60,
+            'NAME': env_str('DJANGO_DB_NAME'),
+            'USER': env_str('DJANGO_DB_USER'),
+            'PASSWORD': env_str('DJANGO_DB_PASSWORD'),
+            'HOST': env_str('DJANGO_DB_HOST', 'localhost'),
+            'PORT': env_str('DJANGO_DB_PORT', '5432'),
+            'CONN_MAX_AGE': env_int('DJANGO_DB_CONN_MAX_AGE', 60),
         }
     }
-else:
+elif DB_ENGINE == 'sqlite':
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+            'NAME': Path(env_str('DJANGO_SQLITE_PATH') or BASE_DIR / 'db.sqlite3'),
         }
     }
+else:
+    raise RuntimeError('DJANGO_DB_ENGINE must be mysql, postgresql or sqlite')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -147,6 +181,10 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
+if len(sys.argv) > 1 and sys.argv[1] == 'test':
+    # Fast hashing for the test suite only.
+    PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
+
 AUTHENTICATION_BACKENDS = [
     'axes.backends.AxesStandaloneBackend',
     'django.contrib.auth.backends.ModelBackend',
@@ -155,12 +193,19 @@ AXES_FAILURE_LIMIT = env_int('AXES_FAILURE_LIMIT', 5)
 AXES_COOLOFF_TIME = 1  # hours
 AXES_LOCKOUT_PARAMETERS = [['username', 'ip_address']]
 AXES_RESET_ON_SUCCESS = True
-# Number of reverse proxies in front of Django (Cloudflare + nginx = 2).
-# Used by DRF throttling and axes to find the client IP in X-Forwarded-For.
+AXES_LOCKOUT_CALLABLE = 'accounts.auth.lockout_response'
+# Client IP for throttling, axes and the IP hashes (common/security.py).
+# Nothing is trusted by default: REMOTE_ADDR is used.
+# DJANGO_NUM_PROXIES: proxies of our own hosting that append to
+#   X-Forwarded-For (DRF semantics: the n-th address from the right).
+# DJANGO_TRUSTED_PROXY_KEY / DJANGO_TRUSTED_PROXIES: a request with
+#   X-Proxy-Key equal to the key, or from those IPs/CIDRs, is the frontend
+#   Worker; the first hop of DJANGO_TRUSTED_PROXY_HEADER is the visitor.
 NUM_PROXIES = env_int('DJANGO_NUM_PROXIES', 0)
-if NUM_PROXIES:
-    AXES_IPWARE_PROXY_COUNT = NUM_PROXIES
-    AXES_IPWARE_META_PRECEDENCE_ORDER = ['HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR']
+TRUSTED_PROXY_KEY = env_str('DJANGO_TRUSTED_PROXY_KEY')
+TRUSTED_PROXIES = env_list('DJANGO_TRUSTED_PROXIES')
+TRUSTED_PROXY_HEADER = env_str('DJANGO_TRUSTED_PROXY_HEADER', 'X-Forwarded-For')
+AXES_CLIENT_IP_CALLABLE = 'common.security.client_ip'
 
 
 # Internationalisation
@@ -187,13 +232,30 @@ USE_TZ = True
 
 # Static and uploaded files
 # MEDIA_ROOT sits outside any web root the frontend serves (Review §11).
+# Static files are served by WhiteNoise. Uploaded media is served by Apache
+# when MEDIA_ROOT is inside the subdomain's document root (see README), or by
+# Django itself with DJANGO_SERVE_MEDIA=1.
 
 STATIC_URL = 'static/'
 STATIC_ROOT = Path(os.environ.get('DJANGO_STATIC_ROOT', BASE_DIR / 'staticfiles'))
-MEDIA_URL = os.environ.get('DJANGO_MEDIA_URL', '/media/')
+MEDIA_URL = '/' + os.environ.get('DJANGO_MEDIA_URL', '/media/').strip('/') + '/'
 MEDIA_ROOT = Path(os.environ.get('DJANGO_MEDIA_ROOT', BASE_DIR / 'media'))
+# Absolute origin that media URLs in API responses start with, e.g.
+# https://api.mumitaholdings.com. Empty: built from the request host.
+MEDIA_BASE_URL = env_str('DJANGO_MEDIA_BASE_URL').rstrip('/')
+SERVE_MEDIA = env_bool('DJANGO_SERVE_MEDIA', DEBUG)
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage'},
+}
+# Bodies above this are spooled to a temp file rather than held in memory.
 FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
+# Non-file request data (JSON bodies, form fields) is capped at 2 MB.
 DATA_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
+# Image uploads (gallery, article images): 15 MB, jpg/png/webp/heic.
+IMAGE_UPLOAD_MAX_BYTES = env_int('IMAGE_UPLOAD_MAX_BYTES', 15 * 1024 * 1024)
+FILE_UPLOAD_PERMISSIONS = 0o644
+FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o755
 
 
 # REST framework
@@ -209,8 +271,11 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 20,
     'DEFAULT_THROTTLE_RATES': {
         'enquiries': os.environ.get('ENQUIRY_THROTTLE_RATE', '5/hour'),
+        'testimonials': os.environ.get('TESTIMONIAL_THROTTLE_RATE', '3/hour'),
+        'login': os.environ.get('LOGIN_THROTTLE_RATE', '30/hour'),
     },
-    'NUM_PROXIES': NUM_PROXIES or None,
+    # 0 means REMOTE_ADDR (DRF's None would trust the whole X-Forwarded-For).
+    'NUM_PROXIES': NUM_PROXIES,
 }
 
 # Cache backs the throttle counters. Use a shared cache (Redis/Memcached)
@@ -218,20 +283,44 @@ REST_FRAMEWORK = {
 CACHES = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}}
 
 
-# CORS: only the frontend origin(s) may call the API from a browser.
+# CORS: only the frontend origin(s) may call the API from a browser, with
+# credentials (the dashboards use the session cookie).
 
 CORS_ALLOWED_ORIGINS = env_list(
     'DJANGO_CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:3111' if DEBUG else ''
 )
 CORS_URLS_REGEX = r'^/api/.*$'
-CORS_ALLOW_METHODS = ['GET', 'OPTIONS', 'POST']
-CORS_ALLOW_CREDENTIALS = False
+CORS_ALLOW_METHODS = ['DELETE', 'GET', 'OPTIONS', 'PATCH', 'POST']
+CORS_ALLOW_CREDENTIALS = True
+
+# CSRF: the frontend origins are trusted for unsafe requests (the dashboards
+# send X-CSRFToken), plus anything listed explicitly (the API's own origin
+# for the Django admin behind a proxy).
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(env_list('DJANGO_CSRF_TRUSTED_ORIGINS') + CORS_ALLOWED_ORIGINS))
+CSRF_HEADER_NAME = 'HTTP_X_CSRFTOKEN'
+# The dashboards read the token from GET auth/csrf/ (body) or the cookie.
+CSRF_COOKIE_HTTPONLY = False
+
+
+# Keys shared with the frontend Worker (never committed; see .env.example).
+REVALIDATE_KEY = env_str('REVALIDATE_KEY')
+REVALIDATE_TIMEOUT = float(env_str('REVALIDATE_TIMEOUT', '3'))
+ANALYTICS_INGEST_KEY = env_str('ANALYTICS_INGEST_KEY')
+
+# Hosts treated as "ours" when deciding whether a link in an article is
+# external (external links get rel="noopener noreferrer").
+SITE_HOSTS = env_list('DJANGO_SITE_HOSTS', 'mumitaholdings.com')
+if FRONTEND_URL:
+    SITE_HOSTS.append(urlsplit(FRONTEND_URL).hostname or '')
 
 
 # Enquiries
 
 ENQUIRY_NOTIFY_EMAILS = env_list('ENQUIRY_NOTIFY_EMAILS', 'info@localhost' if DEBUG else '')
 ENQUIRY_RETENTION_DAYS = env_int('ENQUIRY_RETENTION_DAYS', 365)
+
+# Accounts: new dashboard accounts must use the company domain.
+ACCOUNT_EMAIL_DOMAIN = env_str('ACCOUNT_EMAIL_DOMAIN', 'mumitaholdings.com').lower().lstrip('@')
 
 
 # Email
@@ -265,10 +354,17 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
 X_FRAME_OPTIONS = 'DENY'
+# Sessions: 8 h idle timeout (the expiry slides on every request).
+# In production the cookies are shared by mumitaholdings.com and
+# api.mumitaholdings.com via DJANGO_COOKIE_DOMAIN=.mumitaholdings.com.
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_AGE = 60 * 60 * 8
+SESSION_SAVE_EVERY_REQUEST = True
 CSRF_COOKIE_SAMESITE = 'Lax'
+COOKIE_DOMAIN = env_str('DJANGO_COOKIE_DOMAIN') or None
+SESSION_COOKIE_DOMAIN = COOKIE_DOMAIN
+CSRF_COOKIE_DOMAIN = COOKIE_DOMAIN
 
 # CSP for everything Django itself serves (admin and JSON). The public site's
 # CSP is set by the Next.js frontend.
@@ -313,5 +409,8 @@ LOGGING = {
     'root': {'handlers': ['console'], 'level': 'WARNING'},
     'loggers': {
         'engagement': {'handlers': ['console'], 'level': os.environ.get('ENQUIRY_LOG_LEVEL', 'INFO'), 'propagate': False},
+        'accounts': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'content': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'common': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
     },
 }

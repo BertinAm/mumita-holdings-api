@@ -108,7 +108,7 @@ REGIONS = [
     ('centre', 'Centre', 'Centre', ''),
 ]
 
-# Source: app/frontend/src/lib/data/backers.ts, 03-assets/logos/partners/SOURCES.md
+# Source: app/frontend/src/lib/data/backers.ts, seed_assets/partner-logos/SOURCES.md
 # (logos downloaded with the client's approval) and the Review (brief-documents-
 # extracted.txt, §1 and §9). UNDP's relationship is not stated in any document,
 # so its note is blank (SITEMAP §6 E29).
@@ -126,7 +126,9 @@ PARTNERS = [
      'Stockist: continuous supply in Cameroon'),
 ]
 
-LOGO_DIR = Path(settings.BASE_DIR).parent.parent / '03-assets' / 'logos' / 'partners'
+# Copies of the public partner logos live in the backend repo so the seed
+# works when the backend is deployed on its own.
+LOGO_DIR = Path(settings.BASE_DIR) / 'seed_assets' / 'partner-logos'
 
 
 class Command(BaseCommand):
