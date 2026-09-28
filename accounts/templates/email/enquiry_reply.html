@@ -1,0 +1,8 @@
+{% extends "email/base.html" %}
+{% block content %}
+<p style="margin:0 0 16px;">Hello {{ name }},</p>
+<div style="margin:0 0 24px;white-space:pre-line;">{{ message }}</div>
+<p style="margin:0 0 24px;">{{ sender }}<br>Mumita Holdings</p>
+<p style="margin:0 0 6px;font-size:13px;color:#5B6170;">You wrote on {{ received|date:"j F Y" }}:</p>
+<blockquote style="margin:0;padding:12px 16px;border-left:3px solid #EDE7DA;color:#5B6170;font-size:14px;white-space:pre-line;">{{ original }}</blockquote>
+{% endblock %}

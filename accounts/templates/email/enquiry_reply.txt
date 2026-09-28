@@ -1,0 +1,11 @@
+{% autoescape off %}Hello {{ name }},
+
+{{ message }}
+
+--
+{{ sender }}
+Mumita Holdings
+
+You wrote on {{ received|date:"j F Y" }}:
+{{ original }}
+{% endautoescape %}

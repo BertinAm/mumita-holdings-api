@@ -1,0 +1,11 @@
+{% autoescape off %}Hello {{ name }},
+
+Your article "{{ title }}" needs a few changes before it can be published.
+
+Note from the editor:
+{{ note }}
+
+Edit it at: {{ edit_url }}
+
+Mumita Holdings
+{% endautoescape %}

@@ -1,0 +1,8 @@
+{% autoescape off %}{{ author }} submitted an article for review:
+
+{{ title }}
+
+Review it at: {{ review_url }}
+
+Mumita Holdings website
+{% endautoescape %}

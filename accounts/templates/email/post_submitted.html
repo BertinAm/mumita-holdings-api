@@ -1,0 +1,7 @@
+{% extends "email/base.html" %}
+{% block content %}
+<h1 style="margin:0 0 16px;font-size:24px;line-height:1.25;font-weight:600;">An article is waiting for review</h1>
+<p style="margin:0 0 8px;">{{ author }} submitted:</p>
+<p style="margin:0 0 24px;font-size:18px;font-weight:600;">{{ title }}</p>
+<p style="margin:0;"><a href="{{ review_url }}" style="display:inline-block;background:#2455DB;color:#FFFFFF;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:600;">Review it</a></p>
+{% endblock %}

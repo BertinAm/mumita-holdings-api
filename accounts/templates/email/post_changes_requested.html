@@ -1,0 +1,8 @@
+{% extends "email/base.html" %}
+{% block content %}
+<h1 style="margin:0 0 16px;font-size:24px;line-height:1.25;font-weight:600;">Changes requested</h1>
+<p style="margin:0 0 16px;">Hello {{ name }},</p>
+<p style="margin:0 0 16px;">Your article <strong>{{ title }}</strong> needs a few changes before it can be published.</p>
+<blockquote style="margin:0 0 24px;padding:12px 16px;border-left:3px solid #2455DB;background:#EEF3FF;border-radius:4px;white-space:pre-line;">{{ note }}</blockquote>
+<p style="margin:0;"><a href="{{ edit_url }}" style="display:inline-block;background:#2455DB;color:#FFFFFF;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:600;">Edit the article</a></p>
+{% endblock %}
