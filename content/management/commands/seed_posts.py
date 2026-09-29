@@ -55,7 +55,15 @@ def inline(text):
 
 def blocks_to_html(blocks):
     """Same rules as the frontend's PostBody: p paragraph, h heading (h2),
-    s sub-heading (h3), q pull-quote, l list with one item per line."""
+    s sub-heading (h3), q pull-quote, l list with one item per line.
+
+    These five stay the only block types. The frontend's layouts for the
+    bundled posts (src/lib/data/post-layouts.ts: section index, callouts,
+    card columns, steps rows, profile accordions, figures) are a presentation
+    of these same blocks that the article allow-list cannot carry (no
+    details/summary, class or id, no <img> outside uploads). The page applies
+    them while this HTML still holds the bundled text, word for word, and
+    falls back to this HTML once a post is edited in the dashboard."""
     out = []
     for key, text in blocks.items():
         if key.startswith('h'):
